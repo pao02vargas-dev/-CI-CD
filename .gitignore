@@ -1,0 +1,14 @@
+# Databricks CLI: estado local del bundle (no subir a GitHub)
+.databricks/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# macOS
+.DS_Store
+
+# Archivos de credenciales o de salida local
+.env
+output.log

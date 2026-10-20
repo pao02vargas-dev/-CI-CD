@@ -1,0 +1,69 @@
+# dev.yaml
+# Corre: (a) solo "validate" en Pull Request hacia "dev"
+#        (b) validate + deploy + run cuando el código llega a "dev" (push)
+# Despliega contra el target "development" (databricks.yml): catalog dab_lab_dev.
+#
+# Autenticación: OAuth M2M con el Service Principal sp-dab-cicd (no PAT).
+# Los tres secrets (DATABRICKS_HOST, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET)
+# son Repository secrets: el mismo Service Principal sirve a dev y a prod.
+name: Deploy to dev
+
+on:
+  pull_request:
+    branches:
+      - dev
+  push:
+    branches:
+      - dev
+
+concurrency: dev-${{ github.ref }}
+
+jobs:
+  validate:
+    name: "Validate bundle"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - run: databricks bundle validate
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          DATABRICKS_BUNDLE_ENV: development
+          DATABRICKS_AUTH_TYPE: oauth-m2m
+
+  deploy:
+    name: "Deploy bundle"
+    if: github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - run: databricks bundle deploy
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          DATABRICKS_BUNDLE_ENV: development
+          DATABRICKS_AUTH_TYPE: oauth-m2m
+
+  run_pipeline_job:
+    name: "Run pipeline job"
+    if: github.event_name == 'push'
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - shell: bash
+        name: Run demo_08_job
+        run: |
+          databricks bundle run demo_08_job --refresh-all 2>&1 | tee output.log
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          DATABRICKS_BUNDLE_ENV: development
+          DATABRICKS_AUTH_TYPE: oauth-m2m
